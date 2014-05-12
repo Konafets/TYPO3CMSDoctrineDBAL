@@ -187,6 +187,16 @@ class DatabaseConnection {
 		// Intentionally blank as this will be overloaded by DBAL
 	}
 
+	/**
+	 * Set the connection charset
+	 *
+	 * @param $charset
+	 * @api
+	 */
+	public function setDatabaseCharset($charset) {
+		$this->connectionCharset = $charset;
+	}
+
 	/************************************
 	 *
 	 * Query execution
