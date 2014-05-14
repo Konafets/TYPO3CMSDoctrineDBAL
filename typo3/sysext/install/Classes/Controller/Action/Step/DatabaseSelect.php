@@ -23,6 +23,7 @@ namespace TYPO3\CMS\Install\Controller\Action\Step;
  *
  *  This copyright notice MUST APPEAR in all copies of the script!
  ***************************************************************/
+use TYPO3\CMS\Core\Utility\ExtensionManagementUtility;
 
 
 /**
@@ -33,7 +34,7 @@ namespace TYPO3\CMS\Install\Controller\Action\Step;
 class DatabaseSelect extends AbstractStepAction {
 
 	/**
-	 * @var \TYPO3\CMS\Core\Database\DatabaseConnection
+	 * @var \Konafets\DoctrineDbal\Persistence\Doctrine\DatabaseConnection
 	 */
 	protected $databaseConnection = NULL;
 
@@ -144,6 +145,7 @@ class DatabaseSelect extends AbstractStepAction {
 	protected function getDatabaseList($initialInstallation) {
 		$this->initializeDatabaseConnection();
 		$databaseArray = $this->databaseConnection->admin_get_dbs();
+
 		// Remove mysql organizational tables from database list
 		$reservedDatabaseNames = array('mysql', 'information_schema', 'performance_schema');
 		$allPossibleDatabases = array_diff($databaseArray, $reservedDatabaseNames);
@@ -174,11 +176,34 @@ class DatabaseSelect extends AbstractStepAction {
 	 */
 	protected function initializeDatabaseConnection() {
 		$this->databaseConnection = $this->objectManager->get('TYPO3\\CMS\\Core\\Database\\DatabaseConnection');
-		$this->databaseConnection->setDatabaseUsername($GLOBALS['TYPO3_CONF_VARS']['DB']['username']);
-		$this->databaseConnection->setDatabasePassword($GLOBALS['TYPO3_CONF_VARS']['DB']['password']);
-		$this->databaseConnection->setDatabaseHost($GLOBALS['TYPO3_CONF_VARS']['DB']['host']);
-		$this->databaseConnection->setDatabasePort($GLOBALS['TYPO3_CONF_VARS']['DB']['port']);
-		$this->databaseConnection->setDatabaseSocket($GLOBALS['TYPO3_CONF_VARS']['DB']['socket']);
-		$this->databaseConnection->sql_pconnect();
+		if (!empty($GLOBALS['TYPO3_CONF_VARS']['DB']['username'])) {
+			$this->databaseConnection->setDatabaseUsername($GLOBALS['TYPO3_CONF_VARS']['DB']['username']);
+		}
+		if (!empty($GLOBALS['TYPO3_CONF_VARS']['DB']['password'])) {
+			$this->databaseConnection->setDatabasePassword($GLOBALS['TYPO3_CONF_VARS']['DB']['password']);
+		}
+		if (!empty($GLOBALS['TYPO3_CONF_VARS']['DB']['host'])) {
+			$this->databaseConnection->setDatabaseHost($GLOBALS['TYPO3_CONF_VARS']['DB']['host']);
+		}
+		if (!empty($GLOBALS['TYPO3_CONF_VARS']['DB']['port'])) {
+			$this->databaseConnection->setDatabasePort($GLOBALS['TYPO3_CONF_VARS']['DB']['port']);
+		}
+		if (!empty($GLOBALS['TYPO3_CONF_VARS']['DB']['socket'])) {
+			$this->databaseConnection->setDatabaseSocket($GLOBALS['TYPO3_CONF_VARS']['DB']['socket']);
+		}
+
+		if (ExtensionManagementUtility::isLoaded('doctrine_dbal')) {
+			if (!empty($GLOBALS['TYPO3_CONF_VARS']['DB']['driver'])) {
+				$this->databaseConnection->setDatabaseDriver($GLOBALS['TYPO3_CONF_VARS']['DB']['driver']);
+			}
+
+			/** @var $configurationManager \TYPO3\CMS\Core\Configuration\ConfigurationManager */
+			$configurationManager = $this->objectManager->get('TYPO3\\CMS\\Core\\Configuration\\ConfigurationManager');
+			$isInitialInstallationInProgress = $configurationManager->getConfigurationValueByPath('SYS/isInitialInstallationInProgress');
+
+			$this->databaseConnection->connectDatabase($isInitialInstallationInProgress);
+		} else {
+			$this->databaseConnection->sql_pconnect();
+		}
 	}
 }

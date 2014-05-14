@@ -197,6 +197,18 @@ class DatabaseConnection {
 		$this->connectionCharset = $charset;
 	}
 
+	/**
+	 * Set the database driver for Doctrine
+	 *
+	 * @param string $driver
+	 *
+	 * @return $this
+	 * @api
+	 */
+	public function setDatabaseDriver($driver = 'pdo_mysql') {
+		// This is empty but needed for ext:doctrine-dbal
+	}
+
 	/************************************
 	 *
 	 * Query execution

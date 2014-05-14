@@ -5,7 +5,6 @@
 	<fieldset class="t3-install-form-label-width-7">
 		<ol>
 			<li>
-				<label>Driver [DoctrineDbalDriverSelection.html]</label>
 				<select name="install[values][setDoctrineDriver]" onChange="this.form.submit();">
 					<f:if condition="{selectedDoctrineDriver}">
 						<f:then>
@@ -17,23 +16,19 @@
 
 					<f:if condition="{doctrineDrivers}">
 						<f:then>
-							<f:for each="{doctrineDrivers}" as="drivers" key="abstractionLayer">
-								<optgroup label="{abstractionLayer}">
-									<f:for each="{drivers}" as="driver">
-										<f:if condition="{driver.selected}">
-											<f:then>
-												<option value="{driver.driver}" selected="selected">
-													{driver.label}
-												</option>
-											</f:then>
-											<f:else>
-												<option value="{driver.driver}">
-													{driver.label}
-												</option>
-											</f:else>
-										</f:if>
-									</f:for>
-								</optgroup>
+							<f:for each="{doctrineDrivers}" as="driver">
+								<f:if condition="{driver.selected}">
+									<f:then>
+										<option value="{driver.driver}" selected="selected">
+											{driver.label}
+										</option>
+									</f:then>
+									<f:else>
+										<option value="{driver.driver}">
+											{driver.label}
+										</option>
+									</f:else>
+								</f:if>
 							</f:for>
 						</f:then>
 					</f:if>

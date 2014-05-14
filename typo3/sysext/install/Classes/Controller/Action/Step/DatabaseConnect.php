@@ -54,13 +54,13 @@ class DatabaseConnect extends AbstractStepAction {
 		// TODO: Why is here an isset at the first line but not at the other checks?
 		if (isset($postValues['loadDbal'])) {
 			$result[] = $this->executeLoadDbalExtension();
-		} elseif ($postValues['unloadDbal']) {
+		} elseif (isset($postValues['unloadDbal'])) {
 			$result[] = $this->executeUnloadDbalExtension();
-		} elseif ($postValues['loadDoctrine']) {
+		} elseif (isset($postValues['loadDoctrine'])) {
 			$result[] = $this->executeLoadDoctrineExtension();
-		} elseif ($postValues['unloadDoctrine']) {
+		} elseif (isset($postValues['unloadDoctrine'])) {
 			$result[] = $this->executeUnloadDoctrineExtension();
-		} elseif ($postValues['setDbalDriver']) {
+		} elseif (isset($postValues['setDbalDriver'])) {
 			$driver = $postValues['setDbalDriver'];
 			switch ($driver) {
 				case 'mssql':
@@ -90,6 +90,9 @@ class DatabaseConnect extends AbstractStepAction {
 				$config['_DEFAULT']['config'] = array_merge($config['_DEFAULT']['config'], $driverConfig);
 			}
 			$configurationManager->setLocalConfigurationValueByPath('EXTCONF/dbal/handlerCfg', $config);
+		} elseif (isset($postValues['setDoctrineDriver'])) {
+			$localConfigurationPathValuePairs['DB/driver'] = $postValues['setDoctrineDriver'];
+			$configurationManager->setLocalConfigurationValuesByPathValuePairs($localConfigurationPathValuePairs);
 		} else {
 			$localConfigurationPathValuePairs = array();
 
@@ -102,7 +105,7 @@ class DatabaseConnect extends AbstractStepAction {
 				}
 			}
 
-			if (isset($postValues['username'])) {
+			if (!empty($postValues['username'])) {
 				$value = $postValues['username'];
 				if (strlen($value) <= 50) {
 					$localConfigurationPathValuePairs['DB/username'] = $value;
@@ -115,7 +118,7 @@ class DatabaseConnect extends AbstractStepAction {
 				}
 			}
 
-			if (isset($postValues['password'])) {
+			if (!empty($postValues['password'])) {
 				$value = $postValues['password'];
 				if (strlen($value) <= 50) {
 					$localConfigurationPathValuePairs['DB/password'] = $value;
@@ -128,7 +131,7 @@ class DatabaseConnect extends AbstractStepAction {
 				}
 			}
 
-			if (isset($postValues['host'])) {
+			if (!empty($postValues['host'])) {
 				$value = $postValues['host'];
 				if (preg_match('/^[a-zA-Z0-9_\\.-]+(:.+)?$/', $value) && strlen($value) <= 50) {
 					$localConfigurationPathValuePairs['DB/host'] = $value;
@@ -141,7 +144,7 @@ class DatabaseConnect extends AbstractStepAction {
 				}
 			}
 
-			if (isset($postValues['port']) && $postValues['host'] !== 'localhost') {
+			if (!empty($postValues['port']) && $postValues['host'] !== 'localhost') {
 				$value = $postValues['port'];
 				if (preg_match('/^[0-9]+(:.+)?$/', $value) && $value > 0 && $value <= 65535) {
 					$localConfigurationPathValuePairs['DB/port'] = (int)$value;
@@ -154,7 +157,7 @@ class DatabaseConnect extends AbstractStepAction {
 				}
 			}
 
-			if (isset($postValues['socket']) && $postValues['socket'] !== '') {
+			if (!empty($postValues['socket']) && $postValues['socket'] !== '') {
 				if (@file_exists($postValues['socket'])) {
 					$localConfigurationPathValuePairs['DB/socket'] = $postValues['socket'];
 				} else {
@@ -166,7 +169,7 @@ class DatabaseConnect extends AbstractStepAction {
 				}
 			}
 
-			if (isset($postValues['database'])) {
+			if (!empty($postValues['database'])) {
 				$value = $postValues['database'];
 				if (strlen($value) <= 50) {
 					$localConfigurationPathValuePairs['DB/database'] = $value;
@@ -177,6 +180,11 @@ class DatabaseConnect extends AbstractStepAction {
 					$errorStatus->setMessage('Given database name must be shorter than fifty characters.');
 					$result[] = $errorStatus;
 				}
+			}
+
+			if (!empty($postValues['sslmode'])) {
+				$value = $postValues['sslmode'];
+				$localConfigurationPathValuePairs['DB/sslmode'] = $value;
 			}
 
 			if (!empty($localConfigurationPathValuePairs)) {
@@ -196,7 +204,7 @@ class DatabaseConnect extends AbstractStepAction {
 					/** @var $errorStatus \TYPO3\CMS\Install\Status\ErrorStatus */
 					$errorStatus = $this->objectManager->get('TYPO3\\CMS\\Install\\Status\\ErrorStatus');
 					$errorStatus->setTitle('Database connect not successful');
-					$errorStatus->setMessage('Connecting to the database with given settings failed. Please check.');
+					$errorStatus->setMessage('Connecting the database with given settings failed. Please check.');
 					$result[] = $errorStatus;
 				}
 			}
@@ -215,7 +223,7 @@ class DatabaseConnect extends AbstractStepAction {
 		if ($this->isConnectSuccessful() && $this->isConfigurationComplete()) {
 			return FALSE;
 		}
-		if (!$this->isHostConfigured() && !$this->isDbalEnabled()) {
+		if (!$this->isHostConfigured() && !$this->isDbalEnabled() && !$this->isDoctrineEnabled()) {
 			$this->useDefaultValuesForNotConfiguredOptions();
 			throw new \TYPO3\CMS\Install\Controller\Exception\RedirectException(
 				'Wrote default settings to LocalConfiguration.php, redirect needed',
@@ -324,9 +332,13 @@ class DatabaseConnect extends AbstractStepAction {
 	 * @return boolean TRUE if connect was successful
 	 */
 	protected function isConnectSuccessful() {
-		/** @var $databaseConnection \TYPO3\CMS\Core\Database\DatabaseConnection */
-		$databaseConnection = $this->objectManager->get('TYPO3\\CMS\\Core\\Database\\DatabaseConnection');
-		$databaseConnection->initialize();
+		if ($this->isDoctrineEnabled()) {
+			/** @var $databaseConnection \Konafets\DoctrineDbal\Persistence\Legacy\DatabaseConnection */
+			$databaseConnection = $this->objectManager->get('Konafets\\DoctrineDbal\\Persistence\\Legacy\\DatabaseConnection');
+		} else {
+			/** @var $databaseConnection \TYPO3\CMS\Core\Database\DatabaseConnection */
+			$databaseConnection = $this->objectManager->get('TYPO3\\CMS\\Core\\Database\\DatabaseConnection');
+		}
 
 		if ($this->isDbalEnabled()) {
 			// Set additional connect information based on dbal driver. postgres for example needs
@@ -339,7 +351,7 @@ class DatabaseConnect extends AbstractStepAction {
 		if ($this->isDoctrineEnabled()) {
 			// Set additional connect information based on dbal driver. postgres for example needs
 			// database name already for connect.
-			if (isset($GLOBALS['TYPO3_CONF_VARS']['DB']['database'])) {
+			if (!empty($GLOBALS['TYPO3_CONF_VARS']['DB']['database'])) {
 				$databaseConnection->setDatabaseName($GLOBALS['TYPO3_CONF_VARS']['DB']['database']);
 			}
 			if (isset($GLOBALS['TYPO3_CONF_VARS']['DB']['driver'])) {
@@ -349,15 +361,29 @@ class DatabaseConnect extends AbstractStepAction {
 
 		$databaseConnection->setDatabaseUsername($this->getConfiguredUsername());
 		$databaseConnection->setDatabasePassword($this->getConfiguredPassword());
-		$databaseConnection->setDatabaseHost($this->getConfiguredHost());
-		$databaseConnection->setDatabasePort($this->getConfiguredPort());
-		$databaseConnection->setDatabaseSocket($this->getConfiguredSocket());
+
+		if (empty($GLOBALS['TYPO3_CONF_VARS']['DB']['socket'])) {
+			$databaseConnection->setDatabaseHost($this->getConfiguredHost());
+			$databaseConnection->setDatabasePort($this->getConfiguredPort());
+		} else {
+			$databaseConnection->setDatabaseSocket($this->getConfiguredSocket());
+		}
+
 		$databaseConnection->setDatabaseCharset($this->getConfiguredCharset());
 
 		$result = FALSE;
-		if (@$databaseConnection->sql_pconnect()) {
+		if ($this->isDoctrineEnabled() && $this->getConfiguredUsername()) {
+			/** @var $configurationManager \TYPO3\CMS\Core\Configuration\ConfigurationManager */
+			$configurationManager = $this->objectManager->get('TYPO3\\CMS\\Core\\Configuration\\ConfigurationManager');
+			$isInitialInstallationInProgress = $configurationManager->getConfigurationValueByPath('SYS/isInitialInstallationInProgress');
+
+			$databaseConnection->connectDatabase($isInitialInstallationInProgress);
+		}
+
+		if (@$databaseConnection->isConnected()) {
 			$result = TRUE;
 		}
+
 		return $result;
 	}
 
@@ -538,7 +564,6 @@ class DatabaseConnect extends AbstractStepAction {
 					->assign('renderConnectDetailsHost', TRUE)
 					->assign('renderConnectDetailsSocket', TRUE)
 					->assign('renderConnectDetailsPort', TRUE)
-					->assign('renderConnectDetailsDatabase', TRUE)
 					->assign('renderConnectDetailsCharset', TRUE);
 				break;
 			case 'pdo_sqlite':
@@ -553,8 +578,10 @@ class DatabaseConnect extends AbstractStepAction {
 					->assign('renderConnectDetailsUsername', TRUE)
 					->assign('renderConnectDetailsPassword', TRUE)
 					->assign('renderConnectDetailsHost', TRUE)
+					->assign('renderConnectDetailsSocket', TRUE)
 					->assign('renderConnectDetailsPort', TRUE)
-					->assign('renderConnectDetailsDatabase', TRUE);
+					->assign('renderConnectDetailsSslMode', TRUE)
+					->assign('renderConnectDetailsCharset', TRUE);
 				break;
 			case 'oci8':
 				$this->view
@@ -562,7 +589,6 @@ class DatabaseConnect extends AbstractStepAction {
 					->assign('renderConnectDetailsPassword', TRUE)
 					->assign('renderConnectDetailsHost', TRUE)
 					->assign('renderConnectDetailsPort', TRUE)
-					->assign('renderConnectDetailsDatabase', TRUE)
 					->assign('renderConnectDetailsCharset', TRUE);
 				break;
 			case 'pdo_sqlsrv':
@@ -625,37 +651,33 @@ class DatabaseConnect extends AbstractStepAction {
 	 */
 	protected function getAvailableDoctrineDrivers() {
 		$supportedDrivers = $this->getSupportedDoctrineDrivers();
-		$availableDrivers = array();
+		$availableDrivers = array('none' => array('driver' => 'none', 'label' => 'Select a driver', 'selected' => TRUE));
 		$selectedDoctrineDriver = $this->getSelectedDoctrineDriver();
-		foreach ($supportedDrivers as $abstractionLayer => $drivers) {
-			foreach ($drivers as $driver => $info) {
+		foreach ($supportedDrivers as $driver => $info) {
+			if (isset($info['combine']) && $info['combine'] === 'OR') {
+				$isAvailable = FALSE;
+			} else {
+				$isAvailable = TRUE;
+			}
+			// Loop through each PHP module dependency to ensure it is loaded
+			foreach ($info['extensions'] as $extension) {
 				if (isset($info['combine']) && $info['combine'] === 'OR') {
-					$isAvailable = FALSE;
+					$isAvailable |= extension_loaded($extension);
 				} else {
-					$isAvailable = TRUE;
+					$isAvailable &= extension_loaded($extension);
 				}
-				// Loop through each PHP module dependency to ensure it is loaded
-				foreach ($info['extensions'] as $extension) {
-					if (isset($info['combine']) && $info['combine'] === 'OR') {
-						$isAvailable |= extension_loaded($extension);
-					} else {
-						$isAvailable &= extension_loaded($extension);
-					}
-				}
-				if ($isAvailable) {
-					if (!isset($availableDrivers[$abstractionLayer])) {
-						$availableDrivers[$abstractionLayer] = array();
-					}
-					$availableDrivers[$abstractionLayer][$driver] = array();
-					$availableDrivers[$abstractionLayer][$driver]['driver'] = $driver;
-					$availableDrivers[$abstractionLayer][$driver]['label'] = $info['label'];
-					$availableDrivers[$abstractionLayer][$driver]['selected'] = FALSE;
-					if ($selectedDoctrineDriver === $driver) {
-						$availableDrivers[$abstractionLayer][$driver]['selected'] = TRUE;
-					}
+			}
+			if ($isAvailable) {
+				$availableDrivers[$driver] = array();
+				$availableDrivers[$driver]['driver'] = $driver;
+				$availableDrivers[$driver]['label'] = $info['label'];
+				$availableDrivers[$driver]['selected'] = FALSE;
+				if ($selectedDoctrineDriver === $driver) {
+					$availableDrivers[$driver]['selected'] = TRUE;
 				}
 			}
 		}
+
 		return $availableDrivers;
 	}
 
@@ -699,27 +721,25 @@ class DatabaseConnect extends AbstractStepAction {
 	 */
 	protected function getSupportedDoctrineDrivers() {
 		$supportedDrivers = array(
-			'Native' => array(
-				'pdo_mysql' => array(
-					'label' => 'MySQL PDO driver',
-					'extensions' => array('pdo_mysql')
-				),
-				'pdo_sqlite' => array(
-					'label' => 'SQLite PDO driver',
-					'extensions' => array('pdo_sqlite')
-				),
-				'pdo_pgsql' => array(
-					'label' => 'PostgreSQL PDO driver',
-					'extensions' => array('pdo_pgsql')
-				),
-				'sqlsrv' => array(
-					'label' => 'Microsoft SQL Server PDO driver',
-					'extensions' => array('pdo_sqlsrv')
-				),
-				'oci8' => array(
-					'label' => 'Oracle OCI8 PDO driver',
-					'extensions' => array('oci8')
-				)
+			'pdo_mysql' => array(
+				'label' => 'MySQL PDO driver',
+				'extensions' => array('pdo_mysql')
+			),
+			'pdo_sqlite' => array(
+				'label' => 'SQLite PDO driver',
+				'extensions' => array('pdo_sqlite')
+			),
+			'pdo_pgsql' => array(
+				'label' => 'PostgreSQL PDO driver',
+				'extensions' => array('pdo_pgsql')
+			),
+			'sqlsrv' => array(
+				'label' => 'Microsoft SQL Server PDO driver',
+				'extensions' => array('pdo_sqlsrv')
+			),
+			'oci8' => array(
+				'label' => 'Oracle OCI8 PDO driver',
+				'extensions' => array('oci8')
 			)
 		);
 
@@ -744,10 +764,10 @@ class DatabaseConnect extends AbstractStepAction {
 	 * @return string Dbal driver or empty string if not yet selected
 	 */
 	protected function getSelectedDoctrineDriver() {
-		$result = 'pdo_mysql';
+		$result = 'none';
 
-		if (isset($GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['doctrine']['handlerCfg']['_DEFAULT']['config']['driver'])) {
-			$result = $GLOBALS['TYPO3_CONF_VARS']['EXTCONF']['doctrine']['handlerCfg']['_DEFAULT']['config']['driver'];
+		if (isset($GLOBALS['TYPO3_CONF_VARS']['DB']['driver'])) {
+			$result = $GLOBALS['TYPO3_CONF_VARS']['DB']['driver'];
 		}
 
 		return $result;
@@ -819,6 +839,7 @@ class DatabaseConnect extends AbstractStepAction {
 		/** @var $errorStatus \TYPO3\CMS\Install\Status\WarningStatus */
 		$warningStatus = $this->objectManager->get('TYPO3\\CMS\\Install\\Status\\WarningStatus');
 		$warningStatus->setTitle('Removed Doctrine DBAL');
+
 		return $warningStatus;
 	}
 
@@ -829,6 +850,7 @@ class DatabaseConnect extends AbstractStepAction {
 	 */
 	protected function getConfiguredUsername() {
 		$username = isset($GLOBALS['TYPO3_CONF_VARS']['DB']['username']) ? $GLOBALS['TYPO3_CONF_VARS']['DB']['username'] : '';
+
 		return $username;
 	}
 
@@ -839,6 +861,7 @@ class DatabaseConnect extends AbstractStepAction {
 	 */
 	protected function getConfiguredPassword() {
 		$password = isset($GLOBALS['TYPO3_CONF_VARS']['DB']['password']) ? $GLOBALS['TYPO3_CONF_VARS']['DB']['password'] : '';
+
 		return $password;
 	}
 
@@ -853,6 +876,7 @@ class DatabaseConnect extends AbstractStepAction {
 		if (strlen($port) < 1 && substr_count($host, ':') === 1) {
 			list($host) = explode(':', $host);
 		}
+
 		return $host;
 	}
 
@@ -868,6 +892,7 @@ class DatabaseConnect extends AbstractStepAction {
 			$hostPortArray = explode(':', $host);
 			$port = $hostPortArray[1];
 		}
+
 		return (int)$port;
 	}
 
@@ -878,6 +903,7 @@ class DatabaseConnect extends AbstractStepAction {
 	 */
 	protected function getConfiguredSocket() {
 		$socket = isset($GLOBALS['TYPO3_CONF_VARS']['DB']['socket']) ? $GLOBALS['TYPO3_CONF_VARS']['DB']['socket'] : '';
+
 		return $socket;
 	}
 
@@ -890,5 +916,16 @@ class DatabaseConnect extends AbstractStepAction {
 		$charset = isset($GLOBALS['TYPO3_CONF_VARS']['DB']['charset']) ? $GLOBALS['TYPO3_CONF_VARS']['DB']['charset'] : 'utf8';
 
 		return $charset;
+	}
+
+	/**
+	 * Returns configured driver, if set
+	 *
+	 * @return string
+	 */
+	protected function getConfiguredDriver() {
+		$driver = isset($GLOBALS['TYPO3_CONF_VARS']['DB']['driver']) ? $GLOBALS['TYPO3_CONF_VARS']['DB']['driver'] : 'pdo_mysql';
+
+		return $driver;
 	}
 }

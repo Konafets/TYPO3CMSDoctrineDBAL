@@ -258,6 +258,9 @@ class Bootstrap {
 	 * @internal This is not a public API method, do not use in own extensions
 	 */
 	public function initializeClassLoader() {
+		/** Composer loader */
+		require_once PATH_typo3conf . 'ext/doctrine_dbal/vendor/autoload.php';
+
 		$classLoader = new ClassLoader($this->applicationContext);
 		$this->setEarlyInstance('TYPO3\\CMS\\Core\\Core\\ClassLoader', $classLoader);
 		$classLoader->setRuntimeClassLoadingInformationFromAutoloadRegistry((array) include __DIR__ . '/../../ext_autoload.php');
@@ -737,22 +740,26 @@ class Bootstrap {
 		$databaseConnection->setDatabasePassword(TYPO3_db_password);
 
 		$databaseHost = TYPO3_db_host;
-		if (isset($GLOBALS['TYPO3_CONF_VARS']['DB']['port'])) {
+		if (!empty($GLOBALS['TYPO3_CONF_VARS']['DB']['port'])) {
 			$databaseConnection->setDatabasePort($GLOBALS['TYPO3_CONF_VARS']['DB']['port']);
 		} elseif (strpos($databaseHost, ':') > 0) {
 			// @TODO: Find a way to handle this case in the install tool and drop this
 			list($databaseHost, $databasePort) = explode(':', $databaseHost);
 			$databaseConnection->setDatabasePort($databasePort);
 		}
-		if (isset($GLOBALS['TYPO3_CONF_VARS']['DB']['socket'])) {
+		if (!empty($GLOBALS['TYPO3_CONF_VARS']['DB']['socket'])) {
 			$databaseConnection->setDatabaseSocket($GLOBALS['TYPO3_CONF_VARS']['DB']['socket']);
 		}
 		$databaseConnection->setDatabaseHost($databaseHost);
 
+		if (!empty($GLOBALS['TYPO3_CONF_VARS']['DB']['driver'])) {
+			$databaseConnection->setDatabaseDriver($GLOBALS['TYPO3_CONF_VARS']['DB']['driver']);
+		}
+
 		$databaseConnection->debugOutput = $GLOBALS['TYPO3_CONF_VARS']['SYS']['sqlDebug'];
 
 		if (
-			isset($GLOBALS['TYPO3_CONF_VARS']['SYS']['no_pconnect'])
+			!empty($GLOBALS['TYPO3_CONF_VARS']['SYS']['no_pconnect'])
 			&& !$GLOBALS['TYPO3_CONF_VARS']['SYS']['no_pconnect']
 		) {
 			$databaseConnection->setPersistentDatabaseConnection(TRUE);
@@ -760,7 +767,7 @@ class Bootstrap {
 
 		$isDatabaseHostLocalHost = $databaseHost === 'localhost' || $databaseHost === '127.0.0.1' || $databaseHost === '::1';
 		if (
-			isset($GLOBALS['TYPO3_CONF_VARS']['SYS']['dbClientCompress'])
+			!empty($GLOBALS['TYPO3_CONF_VARS']['SYS']['dbClientCompress'])
 			&& $GLOBALS['TYPO3_CONF_VARS']['SYS']['dbClientCompress']
 			&& !$isDatabaseHostLocalHost
 		) {

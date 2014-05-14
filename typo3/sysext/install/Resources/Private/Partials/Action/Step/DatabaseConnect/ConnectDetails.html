@@ -60,6 +60,28 @@
 				</li>
 			</f:if>
 
+			<f:if condition="{renderConnectDetailsPath}">
+				<li>
+					<label for="t3-install-step-path">Path</label>
+					<input id="t3-install-step-path" class="t3-install-form-input-text" type="text" value="{database}" name="install[values][database]" />
+				</li>
+			</f:if>
+
+			<f:if condition="{renderConnectDetailsMemory}">
+				<li>
+					<label for="t3-install-step-memory">Memory</label>
+					<input id="t3-install-step-memory" class="t3-install-form-input-text" type="checkbox" value="{memory}" name="install[values][memory]" />
+				</li>
+			</f:if>
+
+			<!-- TODO: Add a dropdown with the possible options here http://www.postgresql.org/docs/9.1/static/libpq-connect.html#LIBPQ-CONNECT-SSLMODE -->
+			<f:if condition="{renderConnectDetailsSslMode}">
+				<li>
+					<label for="t3-install-step-ssl">SSL</label>
+					<input id="t3-install-step-ssl" class="t3-install-form-input-text" type="text" value="{sslmode}" name="install[values][sslmode]" />
+				</li>
+			</f:if>
+
 			<f:if condition="{renderConnectDetailsOracleSidConnect}">
 				<li>
 					<label for="t3-install-form-type">Oracle Sid</label>
@@ -79,8 +101,16 @@
 		</ol>
 	</fieldset>
 
-	<button type="submit">
-		Continue
-	</button>
+	<f:if condition="{0:selectedDoctrineDriver} == {0:'none'}">
+		<f:then>
 </form>
-<hr />
+		</f:then>
+		<f:else>
+			<button type="submit">
+				Continue
+			</button>
+			</form>
+			<hr />
+		</f:else>
+
+	</f:if>
