@@ -114,4 +114,99 @@ class SqlExpectedSchemaService {
 		}
 		return $sqlString;
 	}
+
+	/**
+	 * Get expected schema array
+	 *
+	 * @return \Doctrine\DBAL\Schema\Schema Expected schema
+	 */
+	public function getExpectedDatabaseSchemaDoctrine() {
+		$expectedSchema = $this->getTablesDefinitionAsDoctrineSchemaObjects();
+
+		return $expectedSchema;
+	}
+
+	/**
+	 * Cycle through all loaded extensions and get full table definitions as a Doctrine schema object
+	 *
+	 * @param boolean $withStatic TRUE if sql from ext_tables_static+adt.sql should be loaded, too.
+	 *
+	 * @return \Doctrine\DBAL\Schema\Schema
+	 */
+	public function getTablesDefinitionAsDoctrineSchemaObjects($withStatic = FALSE) {
+		$schemas = array();
+
+		// Find all ext_tables.sql of loaded extensions
+		$loadedExtensionInformation = $GLOBALS['TYPO3_LOADED_EXT'];
+		foreach ($loadedExtensionInformation as $extensionConfiguration) {
+			if ((is_array($extensionConfiguration) || $extensionConfiguration instanceof \ArrayAccess) && $extensionConfiguration['Schema.php']) {
+				$schemas[$extensionConfiguration['key']] = require $extensionConfiguration['Schema.php'];
+			}
+		}
+
+		$schemas = $this->emitTablesDefinitionIsBeingBuiltSignal($schemas, TRUE);
+
+		return $this->flattenSchemas($schemas);
+	}
+
+	/**
+	 * Cycle through all loaded schemas and combine them into one
+	 *
+	 * @param array $schemas
+	 *
+	 * @return \Doctrine\DBAL\Schema\Schema
+	 */
+	protected function flattenSchemas(array $schemas) {
+		$tables = array();
+
+		foreach ($schemas as $schema) {
+			foreach ($schema->getTables() as $table) {
+				$tableName = $table->getName();
+				if (array_key_exists($tableName, $tables)) {
+					$columns1 = $tables[$tableName]->getColumns();
+					$columns2 = $table->getColumns();
+					$columns = array_merge($columns1, $columns2);
+					$indices1 = $tables[$tableName]->getIndexes();
+					$indices2 = $table->getIndexes();
+					$indices = array_merge($indices1, $indices2);
+
+					$newTable = new \Doctrine\DBAL\Schema\Table($tableName, $columns, $indices);
+					$newTable->setSchemaConfig(new \Doctrine\DBAL\Schema\SchemaConfig());
+
+					$tables[$tableName] = $newTable;
+				} else {
+					$tables[$tableName] = $table;
+				}
+			}
+		}
+
+		$flattenSchema = new \Doctrine\DBAL\Schema\Schema($tables);
+
+		return $flattenSchema;
+	}
+
+	/**
+	 * Emits a signal to manipulate the tables definitions
+	 *
+	 * @param array $sqlString
+	 *
+	 * @throws Exception\UnexpectedSignalReturnValueTypeException
+	 * @return mixed
+	 */
+	protected function emitTablesDefinitionIsBeingBuiltSignalDoctrine(array $sqlString) {
+		$signalReturn = $this->signalSlotDispatcher->dispatch(__CLASS__, 'tablesDefinitionIsBeingBuiltDoctrine', array('sqlString' => $sqlString));
+		$sqlString = $signalReturn['sqlString'];
+		if (!is_array($sqlString)) {
+			throw new Exception\UnexpectedSignalReturnValueTypeException(
+				sprintf(
+					'The signal %s of class %s returned a value of type %s, but array was expected.',
+					'tablesDefinitionIsBeingBuilt',
+					__CLASS__,
+					gettype($sqlString)
+				),
+				1382351456
+			);
+		}
+		return $sqlString;
+	}
 }

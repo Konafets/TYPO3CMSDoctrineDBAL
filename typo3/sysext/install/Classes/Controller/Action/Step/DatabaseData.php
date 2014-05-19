@@ -23,6 +23,7 @@ namespace TYPO3\CMS\Install\Controller\Action\Step;
  *
  *  This copyright notice MUST APPEAR in all copies of the script!
  ***************************************************************/
+use TYPO3\CMS\Core\Utility\ExtensionManagementUtility;
 
 /**
  * Populate base tables, insert admin user, set install tool password
@@ -118,30 +119,42 @@ class DatabaseData extends AbstractStepAction {
 
 		// Import database data
 		$database = $this->getDatabaseConnection();
-		/** @var \TYPO3\CMS\Install\Service\SqlSchemaMigrationService $schemaMigrationService */
-		$schemaMigrationService = $this->objectManager->get('TYPO3\\CMS\\Install\\Service\\SqlSchemaMigrationService');
 		/** @var \TYPO3\CMS\Install\Service\SqlExpectedSchemaService $expectedSchemaService */
 		$expectedSchemaService = $this->objectManager->get('TYPO3\\CMS\\Install\\Service\\SqlExpectedSchemaService');
 
-		// Raw concatenated ext_tables.sql and friends string
-		$expectedSchemaString = $expectedSchemaService->getTablesDefinitionString(TRUE);
-		$statements = $schemaMigrationService->getStatementArray($expectedSchemaString, TRUE);
-		list($_, $insertCount) = $schemaMigrationService->getCreateTables($statements, TRUE);
+		if (ExtensionManagementUtility::isLoaded('doctrine_dbal')) {
+			/** @var \Konafets\DoctrineDbal\Install\Service\Legacy\SqlSchemaMigrationService $schemaMigrationService */
+			$schemaMigrationService = $this->objectManager->get('TYPO3\\CMS\\Install\\Service\\SqlSchemaMigrationService');
 
-		$fieldDefinitionsFile = $schemaMigrationService->getFieldDefinitions_fileContent($expectedSchemaString);
-		$fieldDefinitionsDatabase = $schemaMigrationService->getFieldDefinitions_database();
-		$difference = $schemaMigrationService->getDatabaseExtra($fieldDefinitionsFile, $fieldDefinitionsDatabase);
-		$updateStatements = $schemaMigrationService->getUpdateSuggestions($difference);
+			$expectedSchemas = $expectedSchemaService->getTablesDefinitionAsDoctrineSchemaObjects(FALSE);
+			$currentSchema = $schemaMigrationService->getCurrentSchemaFromDatabase();
+			$updateStatements = $schemaMigrationService->getDifferenceBetweenDatabaseAndExpectedSchemaAsSql($currentSchema, $expectedSchemas);
+			$schemaMigrationService->performUpdateQueries($updateStatements);
+			$insertStatements = $schemaMigrationService->getDefaultInsertStatements();
+		} else {
+			/** @var \TYPO3\CMS\Install\Service\SqlSchemaMigrationService $schemaMigrationService */
+			$schemaMigrationService = $this->objectManager->get('TYPO3\\CMS\\Install\\Service\\SqlSchemaMigrationService');
 
-		$schemaMigrationService->performUpdateQueries($updateStatements['add'], $updateStatements['add']);
-		$schemaMigrationService->performUpdateQueries($updateStatements['change'], $updateStatements['change']);
-		$schemaMigrationService->performUpdateQueries($updateStatements['create_table'], $updateStatements['create_table']);
+			// Raw concatenated ext_tables.sql and friends string
+			$expectedSchemaString = $expectedSchemaService->getTablesDefinitionString(TRUE);
+			$statements = $schemaMigrationService->getStatementArray($expectedSchemaString, TRUE);
+			list($_, $insertCount) = $schemaMigrationService->getCreateTables($statements, TRUE);
 
-		foreach ($insertCount as $table => $count) {
-			$insertStatements = $schemaMigrationService->getTableInsertStatements($statements, $table);
-			foreach ($insertStatements as $insertQuery) {
-				$insertQuery = rtrim($insertQuery, ';');
-				$database->admin_query($insertQuery);
+			$fieldDefinitionsFile = $schemaMigrationService->getFieldDefinitions_fileContent($expectedSchemaString);
+			$fieldDefinitionsDatabase = $schemaMigrationService->getFieldDefinitions_database();
+			$difference = $schemaMigrationService->getDatabaseExtra($fieldDefinitionsFile, $fieldDefinitionsDatabase);
+			$updateStatements = $schemaMigrationService->getUpdateSuggestions($difference);
+
+			$schemaMigrationService->performUpdateQueries($updateStatements['add'], $updateStatements['add']);
+			$schemaMigrationService->performUpdateQueries($updateStatements['change'], $updateStatements['change']);
+			$schemaMigrationService->performUpdateQueries($updateStatements['create_table'], $updateStatements['create_table']);
+
+			foreach ($insertCount as $table => $count) {
+				$insertStatements = $schemaMigrationService->getTableInsertStatements($statements, $table);
+				foreach ($insertStatements as $insertQuery) {
+					$insertQuery = rtrim($insertQuery, ';');
+					$database->admin_query($insertQuery);
+				}
 			}
 		}
 	}

@@ -76,6 +76,22 @@ class CategoryRegistry implements \TYPO3\CMS\Core\SingletonInterface {
 	}
 
 	/**
+	 * Returns a schema from a template
+	 *
+	 * @param $tableName
+	 * @param $fieldName
+	 *
+	 * @return \Doctrine\DBAL\Schema\Schema
+	 */
+	protected function getSchemaFromTemplate($tableName, $fieldName) {
+		$schema = new \Doctrine\DBAL\Schema\Schema();
+		$table = $schema->createTable($tableName);
+		$table->addColumn($fieldName, 'integer', array('default' => '0', 'notnull' => TRUE));
+
+		return $schema;
+	}
+
+	/**
 	 * Adds a new category configuration to this registry.
 	 * TCA changes are directly applied
 	 *
@@ -194,13 +210,21 @@ class CategoryRegistry implements \TYPO3\CMS\Core\SingletonInterface {
 	/**
 	 * Generates tables definitions for all registered tables.
 	 *
-	 * @return string
+	 * @return string|array
 	 */
 	public function getDatabaseTableDefinitions() {
-		$sql = '';
-		foreach ($this->getExtensionKeys() as $extensionKey) {
-			$sql .= $this->getDatabaseTableDefinition($extensionKey);
+		if (ExtensionManagementUtility::isLoaded('doctrine_dbal')) {
+			$sql = array();
+			foreach ($this->getExtensionKeys() as $extensionKey) {
+				$sql = $this->getDatabaseTableDefinition($extensionKey);
+			}
+		} else {
+			$sql = '';
+			foreach ($this->getExtensionKeys() as $extensionKey) {
+				$sql .= $this->getDatabaseTableDefinition($extensionKey);
+			}
 		}
+
 		return $sql;
 	}
 
@@ -208,19 +232,31 @@ class CategoryRegistry implements \TYPO3\CMS\Core\SingletonInterface {
 	 * Generates table definitions for registered tables by an extension.
 	 *
 	 * @param string $extensionKey Extension key to have the database definitions created for
-	 * @return string
+	 *
+	 * @return string|array
 	 */
 	public function getDatabaseTableDefinition($extensionKey) {
-		if (!isset($this->extensions[$extensionKey]) || !is_array($this->extensions[$extensionKey])) {
+		if (!isset($this->registry[$extensionKey]) || !is_array($this->registry[$extensionKey])) {
 			return '';
 		}
-		$sql = '';
 
-		foreach ($this->extensions[$extensionKey] as $tableName => $fields) {
-			foreach ($fields as $fieldName) {
-				$sql .= sprintf($this->template, $tableName, $fieldName);
+		if (ExtensionManagementUtility::isLoaded('doctrine_dbal')) {
+			$schema = array();
+			foreach ($this->registry[$extensionKey] as $tableName => $fields) {
+				foreach (array_keys($fields) as $fieldName) {
+					$schema[$tableName] = $this->getSchemaFromTemplate($tableName, $fieldName);
+				}
+			}
+			$sql = $schema;
+		} else {
+			$sql = '';
+			foreach ($this->registry[$extensionKey] as $tableName => $fields) {
+				foreach (array_keys($fields) as $fieldName) {
+					$sql .= sprintf($this->template, $tableName, $fieldName);
+				}
 			}
 		}
+
 		return $sql;
 	}
 
@@ -434,8 +470,14 @@ class CategoryRegistry implements \TYPO3\CMS\Core\SingletonInterface {
 	 * @return array
 	 */
 	public function addCategoryDatabaseSchemaToTablesDefinition(array $sqlString) {
-		$this->registerDefaultCategorizedTables();
-		$sqlString[] = $this->getDatabaseTableDefinitions();
+		if (ExtensionManagementUtility::isLoaded('doctrine_dbal')) {
+			$categoryTables = $this->getDatabaseTableDefinitions();
+			foreach ($categoryTables as $categoryTableName => $schema) {
+				$sqlString[$categoryTableName] = $schema;
+			}
+		} else {
+			$sqlString[] = $this->getDatabaseTableDefinitions();
+		}
 		return array('sqlString' => $sqlString);
 	}
 
